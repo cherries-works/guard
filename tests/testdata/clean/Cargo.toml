@@ -1,0 +1,11 @@
+[package]
+name = "guard-test"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+openssl = "0.10"
+hyper = "1"
+time = "0.3"
+regex = "1"
+smallvec = "1"
