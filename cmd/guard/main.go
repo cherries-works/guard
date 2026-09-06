@@ -3,26 +3,33 @@ package main
 import (
 	"flag"
 	"fmt"
-	"os"
 	"time"
 
 	"github.com/cherries-works/guard/internal/analyzer"
+	"github.com/cherries-works/guard/internal/utils"
 )
 
 var SPINNER = []string{"|", "/", "-", "\\"}
 
 func main() {
-	verbose := flag.Bool("verbose", false, "list every advisory affecting each vulnerable dependency")
-	flag.BoolVar(verbose, "v", false, "shorthand for --verbose")
+	verbose := flag.Bool("verbose", false, "List every advisory affecting each vulnerable dependency.")
+	flag.BoolVar(verbose, "v", false, "Shorthand for --verbose")
+
+	help := flag.Bool("help", false, "Prints help.")
+	flag.BoolVar(help, "h", false, "Shorthand for --help")
 
 	flag.Usage = func() {
-		fmt.Fprintln(os.Stderr, "Usage: guard [-v] <path>")
-		flag.PrintDefaults()
+		utils.Help()
 	}
 
 	flag.Parse()
 
 	if flag.NArg() < 1 {
+		flag.Usage()
+		return
+	}
+
+	if *help {
 		flag.Usage()
 		return
 	}
