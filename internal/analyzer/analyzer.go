@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/cherries-works/guard/internal/types"
+	"github.com/cherries-works/guard/internal/utils"
 )
 
 const (
@@ -72,7 +73,7 @@ func Analyzer(pwd string) Analysis {
 }
 
 func PrintAnalysis(analysis Analysis, verbose bool) {
-	fmt.Println("cherries.works Guard v0.1.0")
+	utils.Title()
 	fmt.Println()
 
 	fmt.Println("Project")
