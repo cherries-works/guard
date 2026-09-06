@@ -12,6 +12,10 @@ const (
 	SEPARATOR    = "──────────────────────────────────────────────────────"
 	SUMMARY_SIZE = 48
 	UNKNOWN      = "unknown"
+
+	// MAX_ENTRIES caps how many dependencies each section lists in the
+	// default output. Verbose output is never capped.
+	MAX_ENTRIES = 10
 )
 
 type Analysis struct {
@@ -67,7 +71,7 @@ func Analyzer(pwd string) Analysis {
 	return analysis
 }
 
-func PrintAnalysis(analysis Analysis) {
+func PrintAnalysis(analysis Analysis, verbose bool) {
 	fmt.Println("cherries.works Guard v0.1.0")
 	fmt.Println()
 
@@ -92,8 +96,8 @@ func PrintAnalysis(analysis Analysis) {
 	PrintManifests(analysis.Project)
 	fmt.Println()
 
-	PrintVulnerable(analysis.Vulnerable)
-	PrintOutdated(analysis.Outdated)
+	PrintVulnerable(analysis.Vulnerable, verbose)
+	PrintOutdated(analysis.Outdated, verbose)
 
 	fmt.Println("Results")
 	fmt.Println(SEPARATOR)
@@ -152,23 +156,31 @@ func PrintManifests(project Project) (int, int, int) {
 }
 
 // PrintVulnerable lists every dependency with at least one known
-// vulnerability, followed by the advisories affecting it.
-func PrintVulnerable(dependencies []Dependency) {
+// vulnerability. The default output keeps one line per dependency and is
+// capped; verbose output adds every advisory and lists all of them.
+func PrintVulnerable(dependencies []Dependency, verbose bool) {
 	if len(dependencies) == 0 {
 		return
 	}
 
 	fmt.Println("Vulnerable")
 	fmt.Println(SEPARATOR)
-	fmt.Printf("  %-30s %-15s %s\n", "Package", "Current", "Fixed in")
+	fmt.Printf("  %-30s %-15s %-15s %s\n", "Package", "Current", "Fixed in", "Advisories")
 
-	for _, dependency := range dependencies {
+	shown := Limit(len(dependencies), verbose)
+
+	for _, dependency := range dependencies[:shown] {
 		fmt.Printf(
-			"  %-30s %-15s %s\n",
+			"  %-30s %-15s %-15s %d\n",
 			dependency.Name,
 			VersionOrUnknown(dependency.Status.CurrentVersion),
 			VersionOrUnknown(FixedVersion(dependency)),
+			len(dependency.Status.Vulns),
 		)
+
+		if !verbose {
+			continue
+		}
 
 		for _, vuln := range dependency.Status.Vulns {
 			fmt.Printf(
@@ -181,11 +193,17 @@ func PrintVulnerable(dependencies []Dependency) {
 
 		fmt.Println()
 	}
+
+	PrintRemainder(len(dependencies) - shown)
+
+	if !verbose {
+		fmt.Println()
+	}
 }
 
 // PrintOutdated lists every dependency that is behind its latest
 // published release.
-func PrintOutdated(dependencies []Dependency) {
+func PrintOutdated(dependencies []Dependency, verbose bool) {
 	if len(dependencies) == 0 {
 		return
 	}
@@ -194,7 +212,9 @@ func PrintOutdated(dependencies []Dependency) {
 	fmt.Println(SEPARATOR)
 	fmt.Printf("  %-30s %-15s %s\n", "Package", "Current", "Latest")
 
-	for _, dependency := range dependencies {
+	shown := Limit(len(dependencies), verbose)
+
+	for _, dependency := range dependencies[:shown] {
 		fmt.Printf(
 			"  %-30s %-15s %s\n",
 			dependency.Name,
@@ -203,7 +223,27 @@ func PrintOutdated(dependencies []Dependency) {
 		)
 	}
 
+	PrintRemainder(len(dependencies) - shown)
+
 	fmt.Println()
+}
+
+// Limit reports how many entries a section should list.
+func Limit(total int, verbose bool) int {
+	if verbose || total <= MAX_ENTRIES {
+		return total
+	}
+
+	return MAX_ENTRIES
+}
+
+// PrintRemainder reports the entries hidden by the default cap.
+func PrintRemainder(remaining int) {
+	if remaining <= 0 {
+		return
+	}
+
+	fmt.Printf("  … and %d more (run with -v)\n", remaining)
 }
 
 // FixedVersion reports the first patched release advertised by the

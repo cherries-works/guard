@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"os"
 	"time"
@@ -11,12 +12,22 @@ import (
 var SPINNER = []string{"|", "/", "-", "\\"}
 
 func main() {
-	if len(os.Args) < 2 {
-		fmt.Println("Usage: guard <path>")
+	verbose := flag.Bool("verbose", false, "list every advisory affecting each vulnerable dependency")
+	flag.BoolVar(verbose, "v", false, "shorthand for --verbose")
+
+	flag.Usage = func() {
+		fmt.Fprintln(os.Stderr, "Usage: guard [-v] <path>")
+		flag.PrintDefaults()
+	}
+
+	flag.Parse()
+
+	if flag.NArg() < 1 {
+		flag.Usage()
 		return
 	}
 
-	pwd := os.Args[1]
+	pwd := flag.Arg(0)
 
 	done := make(chan analyzer.Analysis)
 
@@ -28,7 +39,7 @@ func main() {
 		select {
 		case analysis := <-done:
 			fmt.Print("\r\033[K")
-			analyzer.PrintAnalysis(analysis)
+			analyzer.PrintAnalysis(analysis, *verbose)
 			return
 
 		default:
