@@ -2,21 +2,17 @@ package main
 
 import (
 	"flag"
-	"fmt"
-	"time"
 
-	"github.com/cherries-works/guard/internal/analyzer"
+	"github.com/cherries-works/guard/internal/commands"
 	"github.com/cherries-works/guard/internal/utils"
 )
 
-var SPINNER = []string{"|", "/", "-", "\\"}
-
 func main() {
-	verbose := flag.Bool("verbose", false, "List every advisory affecting each vulnerable dependency.")
-	flag.BoolVar(verbose, "v", false, "Shorthand for --verbose")
-
-	help := flag.Bool("help", false, "Prints help.")
-	flag.BoolVar(help, "h", false, "Shorthand for --help")
+	scanCommand := flag.NewFlagSet("scan", flag.ExitOnError)
+	scanPwd := scanCommand.String("path", ".", "Path to iterate from.")
+	scanCommand.StringVar(scanPwd, "p", ".", "Shorthand for --path")
+	scanVerbose := scanCommand.Bool("verbose", false, "List every advisory affecting each vulnerable dependency.")
+	scanCommand.BoolVar(scanVerbose, "v", false, "Shorthand for --verbose")
 
 	flag.Usage = func() {
 		utils.Help()
@@ -29,29 +25,11 @@ func main() {
 		return
 	}
 
-	if *help {
+	cmd := flag.Arg(0)
+	switch cmd {
+	case "scan":
+		commands.Scanner(*scanPwd, *scanVerbose)
+	case "help":
 		flag.Usage()
-		return
-	}
-
-	pwd := flag.Arg(0)
-
-	done := make(chan analyzer.Analysis)
-
-	go func() {
-		done <- analyzer.Analyzer(pwd)
-	}()
-
-	for i := 0; ; i++ {
-		select {
-		case analysis := <-done:
-			fmt.Print("\r\033[K")
-			analyzer.PrintAnalysis(analysis, *verbose)
-			return
-
-		default:
-			fmt.Printf("\rScanning dependencies %s", SPINNER[i%len(SPINNER)])
-			time.Sleep(100 * time.Millisecond)
-		}
 	}
 }
