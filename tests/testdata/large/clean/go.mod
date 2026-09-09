@@ -9,5 +9,5 @@ require (
 	github.com/hashicorp/consul v1.22.7
 	github.com/hashicorp/vault v1.21.4
 	github.com/coder/coder/v2 v2.37.0
-	gogs.io/gogs v0.13.3
+	gogs.io/gogs v0.14.3
 )

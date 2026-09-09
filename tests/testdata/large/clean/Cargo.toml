@@ -4,8 +4,8 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-openssl = "0.10"
+openssl = "0.10.48"
 hyper = "1"
 time = "0.3"
-regex = "1"
-smallvec = "1"
+regex = "1.5.5"
+smallvec = "0.6.14"
