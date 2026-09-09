@@ -2,6 +2,7 @@ package main
 
 import (
 	"flag"
+	"os"
 
 	"github.com/cherries-works/guard/internal/commands"
 	"github.com/cherries-works/guard/internal/utils"
@@ -28,6 +29,7 @@ func main() {
 	cmd := flag.Arg(0)
 	switch cmd {
 	case "scan":
+		scanCommand.Parse(os.Args[2:])
 		commands.Scanner(*scanPwd, *scanVerbose)
 	case "help":
 		flag.Usage()
