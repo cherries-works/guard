@@ -28,3 +28,23 @@ func Scanner(pwd string, verbose bool) {
 		}
 	}
 }
+
+func Tree(pwd string) {
+	done := make(chan analyzer.Analysis)
+	go func() {
+		done <- analyzer.Analyzer(pwd)
+	}()
+
+	for i := 0; ; i++ {
+		select {
+		case analysis := <-done:
+			fmt.Print("\r\033[K")
+			analyzer.PrintTree(analysis)
+			return
+
+		default:
+			fmt.Printf("\rBuilding tree %s", SPINNER[i%len(SPINNER)])
+			time.Sleep(100 * time.Millisecond)
+		}
+	}
+}
