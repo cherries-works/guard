@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/cherries-works/guard/internal/parser"
 	"github.com/cherries-works/guard/internal/types"
 	"github.com/cherries-works/guard/internal/utils"
 )
@@ -23,9 +24,7 @@ type Analysis struct {
 	Project Project
 
 	Dependencies []Dependency
-
-	Vulnerable []Dependency
-	Outdated   []Dependency
+	Findings     []Finding
 
 	DependencyCount int
 }
@@ -37,33 +36,32 @@ func Analyzer(pwd string) Analysis {
 		Project: project,
 	}
 
-	for _, ecosystem := range project.Ecosystems {
-		for _, manifest := range ecosystem.Manifests {
-			dependencies := GetDependencies(
+	for ecosystem_i, ecosystem := range project.Ecosystems {
+		for manifest_i, manifest := range ecosystem.Manifests {
+			dependencies, findings := GetDependencies(
 				ecosystem.Ecosystem,
-				manifest,
+				manifest.Path,
 			)
+			analysis.Project.Ecosystems[ecosystem_i].Manifests[manifest_i].DependencyCount = len(dependencies)
 
 			analysis.Dependencies = append(
 				analysis.Dependencies,
 				dependencies...,
 			)
 
-			for _, dependency := range dependencies {
-				if dependency.Status.Vulnerable {
-					analysis.Vulnerable = append(
-						analysis.Vulnerable,
-						dependency,
-					)
-				}
+			analysis.Findings = append(
+				analysis.Findings,
+				findings...,
+			)
+		}
 
-				if dependency.Status.Outdated {
-					analysis.Outdated = append(
-						analysis.Outdated,
-						dependency,
-					)
-				}
-			}
+		for _, lock := range ecosystem.Locks {
+			fmt.Printf("%s\n", lock.Path)
+			x := parser.ParseLock(
+				ecosystem.Ecosystem,
+				lock.Path,
+			)
+			_ = x
 		}
 	}
 
@@ -95,56 +93,57 @@ func PrintAnalysis(analysis Analysis, verbose bool) {
 	fmt.Println()
 
 	PrintManifests(analysis.Project)
+	PrintLocks(analysis.Project)
 	fmt.Println()
 
-	PrintVulnerable(analysis.Vulnerable, verbose)
-	PrintOutdated(analysis.Outdated, verbose)
+	vulns := PrintVulnerable(analysis, verbose)
+	outs := PrintOutdated(analysis, verbose)
 
 	fmt.Println("Results")
 	fmt.Println(SEPARATOR)
 
 	fmt.Printf("  Dependencies    %d\n", analysis.DependencyCount)
-	fmt.Printf("  Vulnerable      %d\n", len(analysis.Vulnerable))
-	fmt.Printf("  Outdated        %d\n", len(analysis.Outdated))
+	fmt.Printf("  Vulnerable      %d\n", vulns)
+	fmt.Printf("  Outdated        %d\n", outs)
 
 	fmt.Println()
 
-	if len(analysis.Vulnerable) > 0 || len(analysis.Outdated) > 0 {
+	if len(analysis.Findings) > 0 {
 		fmt.Println("Guard found issues.")
 	} else {
 		fmt.Println("No issues found.")
 	}
 }
 
-func PrintManifests(project Project) (int, int, int) {
+func PrintTree(analysis Analysis) {
+	utils.Title()
+	fmt.Println()
+}
+
+func PrintLocks(project Project) (int, int, int) {
 	fmt.Println("Manifests")
 	fmt.Println(SEPARATOR)
-	fmt.Printf("  %-15s %-25s %s\n", "Ecosystem", "Manifest", "Dependencies")
+	fmt.Printf("  %-15s %-25s %s\n", "Ecosystem", "Locks", "Dependencies")
 
 	vulnerablePackages := 0
 	outdatedPackages := 0
 	totalDependencies := 0
 
 	for _, ecosystem := range project.Ecosystems {
-		for _, manifest := range ecosystem.Manifests {
-			dependencies := GetDependencies(
-				ecosystem.Ecosystem,
-				manifest,
-			)
-
+		for _, lock := range ecosystem.Locks {
 			fmt.Printf(
 				"  %-15s %-25s %d\n",
 				types.EcosystemMapped[ecosystem.Ecosystem],
-				filepath.Base(manifest),
-				len(dependencies),
+				filepath.Base(lock.Path),
+				lock.DependencyCount,
 			)
 
-			totalDependencies += len(dependencies)
-			for _, d := range dependencies {
-				if d.Status.Outdated {
+			totalDependencies += len(ecosystem.Dependencies)
+			for _, d := range ecosystem.Dependencies {
+				if d.Outdated {
 					outdatedPackages++
 				}
-				if d.Status.Vulnerable {
+				if d.Vulnerable {
 					vulnerablePackages++
 				}
 			}
@@ -156,77 +155,143 @@ func PrintManifests(project Project) (int, int, int) {
 	return totalDependencies, vulnerablePackages, outdatedPackages
 }
 
+func PrintManifests(project Project) (int, int, int) {
+	fmt.Println("Locks")
+	fmt.Println(SEPARATOR)
+	fmt.Printf("  %-15s %-25s %s\n", "Ecosystem", "Manifests", "Dependencies")
+
+	vulnerablePackages := 0
+	outdatedPackages := 0
+	totalDependencies := 0
+
+	for _, ecosystem := range project.Ecosystems {
+		for _, manifest := range ecosystem.Manifests {
+			fmt.Printf(
+				"  %-15s %-25s %d\n",
+				types.EcosystemMapped[ecosystem.Ecosystem],
+				filepath.Base(manifest.Path),
+				manifest.DependencyCount,
+			)
+
+			totalDependencies += len(ecosystem.Dependencies)
+			for _, d := range ecosystem.Dependencies {
+				if d.Outdated {
+					outdatedPackages++
+				}
+				if d.Vulnerable {
+					vulnerablePackages++
+				}
+			}
+		}
+	}
+
+	fmt.Println(SEPARATOR)
+
+	return totalDependencies, vulnerablePackages, outdatedPackages
+}
+
+func findFindingsById(findings []Finding, id string) []Finding {
+	_findings := []Finding{}
+	for _, finding := range findings {
+		if finding.DependencyID == id {
+			_findings = append(_findings, finding)
+		}
+	}
+	return _findings
+}
+
 // PrintVulnerable lists every dependency with at least one known
 // vulnerability. The default output keeps one line per dependency and is
 // capped; verbose output adds every advisory and lists all of them.
-func PrintVulnerable(dependencies []Dependency, verbose bool) {
-	if len(dependencies) == 0 {
-		return
+func PrintVulnerable(analysis Analysis, verbose bool) int {
+	if analysis.DependencyCount == 0 {
+		return 0
 	}
 
 	fmt.Println("Vulnerable")
 	fmt.Println(SEPARATOR)
-	fmt.Printf("  %-30s %-15s %-15s %s\n", "Package", "Current", "Fixed in", "Advisories")
+	fmt.Printf("  %-30s %-15s %-15s %s\n", "Package", "Current", "Fixed in", "Advisiories")
 
-	shown := Limit(len(dependencies), verbose)
+	shown := Limit(analysis.DependencyCount, verbose)
+	i := 0
+	for _, dependency := range analysis.Dependencies {
+		if !dependency.Vulnerable {
+			continue
+		}
 
-	for _, dependency := range dependencies[:shown] {
+		id := dependency.ID
+		findings := findFindingsById(analysis.Findings, id)
+
+		i++
 		fmt.Printf(
 			"  %-30s %-15s %-15s %d\n",
 			dependency.Name,
-			VersionOrUnknown(dependency.Status.CurrentVersion),
-			VersionOrUnknown(FixedVersion(dependency)),
-			len(dependency.Status.Vulns),
+			VersionOrUnknown(dependency.Version),
+			VersionOrUnknown(findings[0].FixedVersion),
+			len(findings),
 		)
 
 		if !verbose {
 			continue
 		}
 
-		for _, vuln := range dependency.Status.Vulns {
+		for _, finding := range findings {
+			summary := finding.Summary
+			if len(summary) > 30 {
+				summary = summary[:30] + "..."
+			}
+
 			fmt.Printf(
 				"    %-24s %-10s %s\n",
-				vuln.ID,
-				SeverityOf(vuln),
-				SummaryOf(vuln),
+				finding.ID,
+				finding.Severity,
+				summary,
 			)
 		}
 
 		fmt.Println()
 	}
 
-	PrintRemainder(len(dependencies) - shown)
+	PrintRemainder(analysis.DependencyCount - shown)
 
 	if !verbose {
 		fmt.Println()
 	}
+
+	return i
 }
 
 // PrintOutdated lists every dependency that is behind its latest
 // published release.
-func PrintOutdated(dependencies []Dependency, verbose bool) {
-	if len(dependencies) == 0 {
-		return
+func PrintOutdated(analysis Analysis, verbose bool) int {
+	if analysis.DependencyCount == 0 {
+		return 0
 	}
 
 	fmt.Println("Outdated")
 	fmt.Println(SEPARATOR)
 	fmt.Printf("  %-30s %-15s %s\n", "Package", "Current", "Latest")
 
-	shown := Limit(len(dependencies), verbose)
+	shown := Limit(analysis.DependencyCount, verbose)
+	i := 0
+	for _, dependency := range analysis.Dependencies[:shown] {
+		if dependency.Version == dependency.LatestVersion {
+			continue
+		}
 
-	for _, dependency := range dependencies[:shown] {
+		i++
 		fmt.Printf(
 			"  %-30s %-15s %s\n",
 			dependency.Name,
-			VersionOrUnknown(dependency.Status.CurrentVersion),
-			VersionOrUnknown(dependency.Status.LatestVersion),
+			VersionOrUnknown(dependency.Version),
+			VersionOrUnknown(dependency.LatestVersion),
 		)
 	}
 
-	PrintRemainder(len(dependencies) - shown)
+	PrintRemainder(analysis.DependencyCount - shown)
 
 	fmt.Println()
+	return i
 }
 
 // Limit reports how many entries a section should list.
@@ -245,29 +310,6 @@ func PrintRemainder(remaining int) {
 	}
 
 	fmt.Printf("  … and %d more (run with -v)\n", remaining)
-}
-
-// FixedVersion reports the first patched release advertised by the
-// advisories already attached to the dependency. It falls back to the
-// latest known release when no advisory declares a fix.
-func FixedVersion(dependency Dependency) string {
-	for _, vuln := range dependency.Status.Vulns {
-		for _, affected := range vuln.Affected {
-			if !strings.EqualFold(affected.Package.Name, dependency.Name) {
-				continue
-			}
-
-			for _, affectedRange := range affected.Ranges {
-				for _, event := range affectedRange.Events {
-					if event.Fixed != "" {
-						return event.Fixed
-					}
-				}
-			}
-		}
-	}
-
-	return dependency.Status.LatestVersion
 }
 
 func SeverityOf(vuln OSVVulnerability) string {

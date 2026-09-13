@@ -7,10 +7,20 @@ import (
 	"github.com/cherries-works/guard/internal/utils"
 )
 
+type Manifest struct {
+	Path            string
+	DependencyCount int
+}
+
+type Lock struct {
+	Path            string
+	DependencyCount int
+}
+
 type Ecosystem struct {
 	Ecosystem    types.Ecosystem
-	Manifests    []string
-	Locks        []string
+	Manifests    []Manifest
+	Locks        []Lock
 	Dependencies []Dependency
 }
 
@@ -90,7 +100,9 @@ func GetEcoSystems(pwd string) []Ecosystem {
 				checked := false
 				for ecosystem_index, _ecosystem := range ecosystems {
 					if _ecosystem.Ecosystem == ManifestFilesMapped[manifest_index] {
-						ecosystems[ecosystem_index].Manifests = append(ecosystems[ecosystem_index].Manifests, filename)
+						ecosystems[ecosystem_index].Manifests = append(ecosystems[ecosystem_index].Manifests, Manifest{
+							Path: filename,
+						})
 						checked = true
 						break
 					}
@@ -102,7 +114,7 @@ func GetEcoSystems(pwd string) []Ecosystem {
 
 				ecosystem := Ecosystem{
 					Ecosystem: ManifestFilesMapped[manifest_index],
-					Manifests: []string{filename},
+					Manifests: []Manifest{{Path: filename}},
 				}
 				ecosystems = append(ecosystems, ecosystem)
 			}
@@ -113,7 +125,9 @@ func GetEcoSystems(pwd string) []Ecosystem {
 				checked := false
 				for ecosystem_index, _ecosystem := range ecosystems {
 					if _ecosystem.Ecosystem == LockFilesMapped[lock_index] {
-						ecosystems[ecosystem_index].Locks = append(ecosystems[ecosystem_index].Locks, filename)
+						ecosystems[ecosystem_index].Locks = append(ecosystems[ecosystem_index].Locks, Lock{
+							Path: filename,
+						})
 						checked = true
 						break
 					}
@@ -125,7 +139,7 @@ func GetEcoSystems(pwd string) []Ecosystem {
 
 				ecosystem := Ecosystem{
 					Ecosystem: LockFilesMapped[lock_index],
-					Locks:     []string{filename},
+					Locks:     []Lock{{Path: filename}},
 				}
 				ecosystems = append(ecosystems, ecosystem)
 			}
