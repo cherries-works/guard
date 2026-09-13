@@ -15,6 +15,10 @@ func main() {
 	scanVerbose := scanCommand.Bool("verbose", false, "List every advisory affecting each vulnerable dependency.")
 	scanCommand.BoolVar(scanVerbose, "v", false, "Shorthand for --verbose")
 
+	treeCommand := flag.NewFlagSet("scan", flag.ExitOnError)
+	treePwd := treeCommand.String("path", ".", "Path to iterate from.")
+	treeCommand.StringVar(treePwd, "p", ".", "Shorthand for --path")
+
 	flag.Usage = func() {
 		utils.Help()
 	}
@@ -31,6 +35,9 @@ func main() {
 	case "scan":
 		scanCommand.Parse(os.Args[2:])
 		commands.Scanner(*scanPwd, *scanVerbose)
+	case "tree":
+		scanCommand.Parse(os.Args[2:])
+		commands.Tree(*scanPwd)
 	case "help":
 		flag.Usage()
 	}
